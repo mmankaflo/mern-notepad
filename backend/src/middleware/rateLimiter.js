@@ -1,6 +1,13 @@
 import ratelimit from "../config/upstash.js";
 
+const retryDelayMs = 30_000;
+let redisUnavailableUntil = 0;
+
 const rateLimiter = async (req, res, next) => {
+  if (Date.now() < redisUnavailableUntil) {
+    return next();
+  }
+
   try {
     const { success } = await ratelimit.limit("My-limit-key");
 
@@ -12,8 +19,9 @@ const rateLimiter = async (req, res, next) => {
 
     next();
   } catch (error) {
-    console.log("Rate limit error", error);
-    next(error);
+    redisUnavailableUntil = Date.now() + retryDelayMs;
+    console.warn(`Rate limiter unavailable; allowing request: ${error.message}`);
+    next();
   }
 };
 
